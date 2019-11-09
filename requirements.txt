@@ -1,3 +1,5 @@
 passlib
 argon2_cffi
 tinydb
+spidev
+mfrc522

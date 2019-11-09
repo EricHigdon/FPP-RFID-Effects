@@ -1,5 +1,17 @@
 import os
-from passlib.hash import argon2
+import sys
+from tinydb import TinyDB, Query
+
+USE_ENCRYPTION = '--no-encryption' not in sys.argv
+USE_RFID = '--no-rfid' not in sys.argv
+
+if USE_ENCRYPTION:
+	from passlib.hash import argon2
+
+if USE_RFID:
+	from RPi import GPIO
+	from mfrc522 import SimpleMFRC522 as rfid
+	reader = rfid()
 
 EFFECTS = [
 	'blue',
@@ -7,7 +19,7 @@ EFFECTS = [
 ]
 
 DEFAULT_EFFECT = EFFECTS[0]
-PROFILES = {}
+profiles = TinyDB(os.path.join(os.path.dirname(__file__), 'profiles.json'))
 
 def start_effect(effect):
 	cmd = 'fpp -e {},1,1'.format(effect)
@@ -18,23 +30,39 @@ def kill_effect(effect):
 	os.system(cmd)
 	
 def get_profile(id):
-	for key, profile in PROFILES.items():
-		if argon2.verify(id, key):
+	
+	if USE_ENCRYPTION and not USE_RFID:
+		for profile in profiles.all():
+			if argon2.verify(id, profile['id']):
+				print('Loading profile: {}'.format(profile['name']))
+				return profile
+	else:
+		Profile = Query()
+		profile = profiles.search(Profile.id == id)
+		if profile:
+			profile = profile[0]
+			if USE_ENCRYPTION and not argon2.verify(id, profile['key']):
+				return None
 			print('Loading profile: {}'.format(profile['name']))
 			return profile
 	return None
 
 def create_profile(id):
-	id = argon2.hash(id)
 	name = input('Enter the new user\'s name: ')
 	print('Available effects:')
 	for effect in EFFECTS:
 		print(effect)
 	effect = input('Choose an effect for the new user: ')
-	PROFILES[id] = {
+	profile = {
+		'id': id,
 		'name': name,
 		'effect': effect
 	}
+	if USE_ENCRYPTION and key is not None:
+		profile['key'] = argon2.hash(key)
+	elif USE_ENCRYPTION:
+		profile['id'] = argon2.hash(id)
+	profiles.insert(profile)
 
 def main():
 	old_effect = None
@@ -42,7 +70,11 @@ def main():
 		for effect in EFFECTS:
 			kill_effect(effect)
 		while True:
-			id = input('ID: ')
+			if USE_RFID:
+				print('Waiting for RFID scan...')
+				id, code = reader.read()
+			else:
+				id = input('ID: ')
 			profile = get_profile(id)
 			if profile is not None:
 				effect = profile.get('effect', DEFAULT_EFFECT)
@@ -57,6 +89,8 @@ def main():
 	except KeyboardInterrupt:
 		print('\nExiting...')
 	finally:
+		if USE_RFID:
+			GPIO.cleanup()
 		if old_effect is not None:
 			kill_effect(old_effect)
 
