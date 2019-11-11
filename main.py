@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from tinydb import TinyDB, Query
 
 USE_ENCRYPTION = '--no-encryption' not in sys.argv
@@ -10,6 +11,12 @@ if not USE_RFID and USE_MFRC:
 	raise Exception('MFRC is a RFID reader, so "--use-mfrc" and "--use-names" cannot be used together')
 
 class BaseReader:
+
+	def wait(self):
+		if hasattr(self, '_running'):
+			time.sleep(1)
+		else:
+			self._running = True
 
 	def get_db_path(self):
 		return 'db_profiles_{}{}.json'.format(
@@ -46,6 +53,7 @@ class MFRCReader(BaseReader):
 		self.reader = rfid()
 	
 	def read(self):
+		self.wait()
 		print('Waiting for RFID scan...')
 		return self.reader.read()
 
@@ -68,6 +76,7 @@ class SerialReader(BaseReader):
 			self.reader = serial.Serial('/dev/ttyAMA0', 9600, timeout=1)
 
 	def read(self):
+		self.wait()
 		print('Waiting for RFID scan...')
 		return self.reader.read(12), None
 
