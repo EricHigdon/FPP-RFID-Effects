@@ -70,15 +70,15 @@ class MFRCReader(BaseReader):
 class SerialReader(BaseReader):
 	def __init__(self):
 		import serial
-		if self.is_rpi_3():
-			self.reader = serial.Serial('/dev/ttyS0', 9600, timeout=1)
-		else:
-			self.reader = serial.Serial('/dev/ttyAMA0', 9600, timeout=1)
+		self.reader = serial.Serial('/dev/serial0', 9600, timeout=1)
 
 	def read(self):
 		self.wait()
 		print('Waiting for RFID scan...')
-		return self.reader.read(12), None
+		id = ''
+		while len(id) == 0:
+			id = self.reader.read(12)
+		return id, None
 
 	def get_db_path(self):
 		return super().get_db_path().format(
