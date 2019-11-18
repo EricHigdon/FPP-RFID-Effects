@@ -4,3 +4,4 @@ tinydb
 spidev
 mfrc522
 pyserial
+pigpio

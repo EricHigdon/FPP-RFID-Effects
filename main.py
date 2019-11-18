@@ -1,14 +1,20 @@
 import os
 import sys
 import time
+from copy import copy
 from tinydb import TinyDB, Query
 
 USE_ENCRYPTION = '--no-encryption' not in sys.argv
 USE_RFID = '--use-names' not in sys.argv
 USE_MFRC  = '--use-mfrc' in sys.argv
+USE_SERIAL = '--use-serial' in sys.argv
 
-if not USE_RFID and USE_MFRC:
-	raise Exception('MFRC is a RFID reader, so "--use-mfrc" and "--use-names" cannot be used together')
+if not USE_RFID and (USE_MFRC or USE_SERIAL):
+	raise Exception(
+		'"{}" and "--use-names" cannot be used together'.format(
+			'--use-mfrc' if USE_MFRC else '--use-serial'
+		)
+	)
 
 class BaseReader:
 
@@ -23,6 +29,10 @@ class BaseReader:
 			self.__class__.__name__.lower(),
 			'_insecure' if not USE_ENCRYPTION else ''
 		)
+
+	def read(self):
+		self.wait()
+		print('Waiting for RFID scan...')
 	
 	def get_profile(self, id, key=None):
 		
@@ -53,16 +63,8 @@ class MFRCReader(BaseReader):
 		self.reader = rfid()
 	
 	def read(self):
-		self.wait()
-		print('Waiting for RFID scan...')
+		super().read()
 		return self.reader.read()
-
-	def get_db_path(self):
-		return super().get_db_path().format(
-			'_mfrc{}'.format(
-				'_insecure' if not USE_ENCRYPTION else ''
-			)
-		)
 
 	def cleanup(self):
 		self.GPIO.cleanup()
@@ -73,23 +75,38 @@ class SerialReader(BaseReader):
 		self.reader = serial.Serial('/dev/serial0', 9600, timeout=1)
 
 	def read(self):
-		self.wait()
-		print('Waiting for RFID scan...')
+		super().read()
 		id = ''
 		while len(id) == 0:
 			id = self.reader.read(12)
 		return id, None
 
-	def get_db_path(self):
-		return super().get_db_path().format(
-			'_serial{}'.format(
-				'_insecure' if not USE_ENCRYPTION else ''
-			)
-		)
-		
 	def is_rpi_3(self):
 		with open('/proc/device-tree/model', 'r') as version:
 			return 'Raspberry Pi 3' in version.readline()
+
+class WiegandReader(BaseReader):
+	value = ''
+
+	def __init__(self):
+		import pigpio
+		import wiegand
+		pi = pigpio.pi()
+		self.reader = wiegand.decoder(pi, 14, 15, self.wiegand_callback)
+
+	def wiegand_callback(self, bits, value):
+		self.value = str(value)
+	
+	def read(self):
+		super().read()
+		while True:
+			if len(self.value) > 0:
+				value = copy(self.value)
+				self.value = ''
+				return value, None
+
+	def cleanup(self):
+		self.reader.cancel()
 
 class NameReader(BaseReader):
 	def read(self):
@@ -102,12 +119,32 @@ if USE_MFRC:
 	reader = MFRCReader()
 elif not USE_RFID:
 	reader = NameReader()
-else:
+elif USE_SERIAL:
 	reader = SerialReader()
+else:
+	reader = WiegandReader()
 
 EFFECTS = [
 	'blue',
-	'purple'
+	'blue_green_plasma',
+	'blue_meteors',
+	'blue_up',
+	'candy_cane',
+	'fire',
+	'green',
+	'green_bounce',
+	'purple',
+	'purple_life',
+	'rainbow_butterfly',
+	'rainbow_cycle',
+	'rainbow_plasma',
+	'rainbow_twinkle',
+	'rainbow_wave',
+	'red',
+	'snowing',
+	'us_strobe',
+	'white',
+	'white_twinkle'
 ]
 
 DEFAULT_EFFECT = EFFECTS[0]
@@ -118,11 +155,11 @@ profiles_path = os.path.join(
 profiles = TinyDB(profiles_path)
 
 def start_effect(effect):
-	cmd = 'fpp -e {},1,1'.format(effect)
+	cmd = 'fpp -e "{}",1,1'.format(effect)
 	os.system(cmd)
 
 def kill_effect(effect):
-	cmd = 'fpp -E {}'.format(effect)
+	cmd = 'fpp -E "{}"'.format(effect)
 	os.system(cmd)
 	
 def create_profile(id, key=None):
@@ -141,6 +178,7 @@ def create_profile(id, key=None):
 	elif USE_ENCRYPTION:
 		profile['id'] = argon2.hash(id)
 	profiles.insert(profile)
+	return profile
 
 def main():
 	old_effect = None
@@ -159,7 +197,14 @@ def main():
 			else:
 				print('No user with that ID extists')
 				if input('Would you like to create a new user (y/n)? ').lower() == 'y':
-					create_profile(id, key)
+					profile = create_profile(id, key)
+					effect = profile.get('effect', DEFAULT_EFFECT)
+					if old_effect is not None:
+						kill_effect(old_effect)
+					start_effect(effect)
+					old_effect = effect
+
+
 	except KeyboardInterrupt:
 		print('\nExiting...')
 	finally:
