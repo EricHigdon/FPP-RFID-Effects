@@ -67,7 +67,7 @@ class BaseReader:
 
     def get_argon_profile(self, id):
         for profile in profiles.all():
-            if argon2.verify(id, profile['id']):
+            if profile['id'].startswith('$argon2') and argon2.verify(id, profile['id']):
                 print('Loading profile: {}'.format(profile['name']))
                 if not USE_ARGON:
                     print('converting profile to non-argon encryption')
