@@ -130,7 +130,7 @@ class WiegandReader(BaseReader):
         import pigpio
         import wiegand
         pi = pigpio.pi()
-        self.reader = wiegand.decoder(pi, 14, 15, self.wiegand_callback)
+        self.reader = wiegand.decoder(pi, 14, 15, self.wiegand_callback, bit_timeout=3)
 
     def wiegand_callback(self, bits, value):
         self.value = str(value)
