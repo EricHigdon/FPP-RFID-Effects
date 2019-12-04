@@ -222,6 +222,7 @@ def create_profile(id, key=None):
 
 def main():
     old_effect = None
+    current_profile = None
     try:
         for effect in EFFECTS:
             kill_effect(effect)
@@ -232,8 +233,15 @@ def main():
                 effect = profile.get('effect', DEFAULT_EFFECT)
                 if old_effect is not None:
                     kill_effect(old_effect)
+                if current_profile is not None and profile['id'] == current_profile['id']:
+                    effect_index = EFFECTS.index(effect)
+                    if effect_index == len(EFFECTS) - 1:
+                        effect_index = -1
+                    effect = EFFECTS[effect_index + 1]
+                    reader.update_profile(profile, effect=effect)
                 start_effect(effect)
                 old_effect = effect
+                current_profile = profile
             else:
                 print('No user with that ID extists')
                 if input('Would you like to create a new user (y/n)? ').lower() == 'y':
